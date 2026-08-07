@@ -1,6 +1,5 @@
 # Practical 4: Task Management RESTful API
-
-**Course Outcome / Program Outcome**: CO2 / PO3, PO5  
+ 
 **Technology Stack**: Node.js (v18+), Express.js  
 
 A RESTful backend server built with Node.js and Express for a Task Management System featuring complete CRUD endpoints, structured JSON responses, custom middleware pipeline (logging, header validation, ID validation), undefined route handling (404), and centralized global error handling (500).
