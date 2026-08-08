@@ -1,26 +1,21 @@
 const express = require('express');
+const mongoose = require('mongoose');
+require('dotenv').config();
+const Task = require('./models/Task');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Temporary in-memory array for task storage
-let tasks = [
-  {
-    id: 1,
-    title: 'Learn Express Middleware',
-    description: 'Understand request lifecycle and next() function execution flow',
-    completed: true
-  },
-  {
-    id: 2,
-    title: 'Build RESTful API',
-    description: 'Implement full CRUD routes with Express and custom middleware pipeline',
-    completed: false
-  }
-];
-let nextId = 3;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/task-manager-db';
 
 // ==========================================
-// 1. Global Request Logging Middleware
+// 1. Database Connection
+// ==========================================
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch((err) => console.error('MongoDB connection error:', err));
+
+// ==========================================
+// 2. Global Request Logging Middleware
 // ==========================================
 // Logs HTTP method, URL, and timestamp for every incoming request
 app.use((req, res, next) => {
@@ -32,7 +27,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // ==========================================
-// 2. Custom Middleware: Content-Type Validator
+// 3. Custom Middleware: Content-Type Validator
 // ==========================================
 // Rejects POST and PUT requests without Content-Type: application/json header
 const validateJsonHeader = (req, res, next) => {
@@ -51,108 +46,105 @@ const validateJsonHeader = (req, res, next) => {
 app.use(validateJsonHeader);
 
 // ==========================================
-// 3. Route-Specific Middleware: Task ID Validator
+// 4. Route-Specific Middleware: Task ID Validator
 // ==========================================
-// Validates that the task ID parameter is a positive integer before reaching route handlers
+// Validates that the task ID parameter is a valid 24-character hexadecimal MongoDB ObjectId
 const validateTaskId = (req, res, next) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id) || id <= 0) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({
       error: 'Bad Request',
-      message: 'Task ID must be a positive integer.'
+      message: 'Task ID must be a valid 24-character hexadecimal MongoDB ObjectId.'
     });
   }
-  req.taskId = id;
   next();
 };
 
 // ==========================================
-// 4. RESTful API Routes (CRUD Operations)
+// 5. RESTful API Routes (CRUD Operations with Mongoose)
 // ==========================================
 
 // GET /tasks - Retrieve all tasks
-app.get('/tasks', (req, res) => {
-  res.status(200).json(tasks);
+app.get('/tasks', async (req, res, next) => {
+  try {
+    const tasks = await Task.find().sort({ createdAt: -1 });
+    res.status(200).json(tasks);
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /tasks/:id - Retrieve a single task by ID
-app.get('/tasks/:id', validateTaskId, (req, res) => {
-  const task = tasks.find(t => t.id === req.taskId);
-  if (!task) {
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `Task with ID ${req.taskId} not found.`
-    });
+app.get('/tasks/:id', validateTaskId, async (req, res, next) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Task with ID ${req.params.id} not found.`
+      });
+    }
+    res.status(200).json(task);
+  } catch (err) {
+    next(err);
   }
-  res.status(200).json(task);
 });
 
 // POST /tasks - Create a new task
-app.post('/tasks', (req, res) => {
-  const { title, description, completed } = req.body;
-
-  if (!title || typeof title !== 'string' || title.trim() === '') {
-    return res.status(400).json({
-      error: 'Bad Request',
-      message: 'Field "title" is required and must be a non-empty string.'
+app.post('/tasks', async (req, res, next) => {
+  try {
+    const { title, description, completed, priority } = req.body;
+    const newTask = new Task({
+      title,
+      description,
+      completed,
+      priority
     });
+    const savedTask = await newTask.save();
+    res.setHeader('Location', `/tasks/${savedTask._id}`);
+    res.status(201).json(savedTask);
+  } catch (err) {
+    next(err);
   }
-
-  const newTask = {
-    id: nextId++,
-    title: title.trim(),
-    description: description ? String(description).trim() : '',
-    completed: Boolean(completed)
-  };
-
-  tasks.push(newTask);
-  res.status(201).json(newTask);
 });
 
-// PUT /tasks/:id - Update an existing task
-app.put('/tasks/:id', validateTaskId, (req, res) => {
-  const taskIndex = tasks.findIndex(t => t.id === req.taskId);
-  if (taskIndex === -1) {
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `Task with ID ${req.taskId} not found.`
-    });
+// PUT /tasks/:id - Update an existing task by ID
+app.put('/tasks/:id', validateTaskId, async (req, res, next) => {
+  try {
+    const updatedTask = await Task.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { returnDocument: 'after', runValidators: true }
+    );
+    if (!updatedTask) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Task with ID ${req.params.id} not found.`
+      });
+    }
+    res.status(200).json(updatedTask);
+  } catch (err) {
+    next(err);
   }
-
-  const { title, description, completed } = req.body;
-
-  if (title !== undefined && (typeof title !== 'string' || title.trim() === '')) {
-    return res.status(400).json({
-      error: 'Bad Request',
-      message: 'Field "title" must be a non-empty string.'
-    });
-  }
-
-  tasks[taskIndex] = {
-    ...tasks[taskIndex],
-    ...(title !== undefined && { title: title.trim() }),
-    ...(description !== undefined && { description: String(description).trim() }),
-    ...(completed !== undefined && { completed: Boolean(completed) })
-  };
-
-  res.status(200).json(tasks[taskIndex]);
 });
 
 // DELETE /tasks/:id - Delete a task by ID
-app.delete('/tasks/:id', validateTaskId, (req, res) => {
-  const taskIndex = tasks.findIndex(t => t.id === req.taskId);
-  if (taskIndex === -1) {
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `Task with ID ${req.taskId} not found.`
+app.delete('/tasks/:id', validateTaskId, async (req, res, next) => {
+  try {
+    const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    if (!deletedTask) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Task with ID ${req.params.id} not found.`
+      });
+    }
+    res.status(200).json({
+      message: 'Task deleted successfully',
+      task: deletedTask
     });
+  } catch (err) {
+    next(err);
   }
-
-  const deletedTask = tasks.splice(taskIndex, 1)[0];
-  res.status(200).json({
-    message: 'Task deleted successfully',
-    task: deletedTask
-  });
 });
 
 // GET /test-error - Demo route to test global error handling middleware
@@ -162,7 +154,7 @@ app.get('/test-error', (req, res, next) => {
 });
 
 // ==========================================
-// 5. 404 Handler for Undefined Routes
+// 6. 404 Handler for Undefined Routes
 // ==========================================
 // Catches any requests to routes that were not defined above
 app.use((req, res, next) => {
@@ -173,12 +165,32 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
-// 6. Global Error Handling Middleware
+// 7. Global Error Handling Middleware
 // ==========================================
-// Must be defined last in the middleware chain with 4 parameters (err, req, res, next)
+// Intercepts Mongoose ValidationErrors and CastErrors to return structured JSON
 app.use((err, req, res, next) => {
-  console.error('[Global Error Handler Log]:', err.stack);
-  res.status(500).json({ error: 'Something went wrong' });
+  console.error('[Global Error Handler Log]:', err.message);
+
+  if (err.name === 'ValidationError') {
+    const messages = Object.values(err.errors).map(e => e.message);
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: messages.join(' '),
+      details: messages
+    });
+  }
+
+  if (err.name === 'CastError') {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: `Invalid format for field "${err.path}".`
+    });
+  }
+
+  res.status(err.status || 500).json({
+    error: err.name || 'Internal Server Error',
+    message: err.message || 'Something went wrong'
+  });
 });
 
 // Start the server
