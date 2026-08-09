@@ -1,12 +1,26 @@
-# Practical 4: Task Management RESTful API
- 
-**Technology Stack**: Node.js (v18+), Express.js  
+# Practical 5: MongoDB Integration and Schema Design with Mongoose
 
-A RESTful backend server built with Node.js and Express for a Task Management System featuring complete CRUD endpoints, structured JSON responses, custom middleware pipeline (logging, header validation, ID validation), undefined route handling (404), and centralized global error handling (500).
+**Technology Stack**: Node.js (v18+), Express.js, MongoDB, Mongoose ODM, dotenv
+
+A RESTful Task Management API extended from Practical 4 to integrate MongoDB via Mongoose. Features schema validation, pre-save hooks for data sanitization, full CRUD database operations, custom middleware, and structured JSON error responses.
 
 ---
 
-## 📌 Architecture & Middleware Pipeline
+## 📌 Architecture & Data Flow
+
+```text
+Express App
+    │
+    ▼
+Mongoose ODM (Schema Validation & Model Hooks)
+    │
+    ▼
+MongoDB Database
+    └── tasks collection
+        { _id, title, description, completed, priority, createdAt, __v }
+```
+
+### Request Processing & Middleware Pipeline
 
 ```text
 Client (Postman / Thunder Client / Browser)
@@ -28,11 +42,11 @@ Client (Postman / Thunder Client / Browser)
                      │
                      ▼
                Express Router
-       ├── GET    /tasks         → getAllTasks (200)
-       ├── GET    /tasks/:id     → getTaskById (200 / 400 / 404) [via validateTaskId middleware]
-       ├── POST   /tasks         → createTask  (201 / 400)
-       ├── PUT    /tasks/:id     → updateTask  (200 / 400 / 404) [via validateTaskId middleware]
-       ├── DELETE /tasks/:id     → deleteTask  (200 / 400 / 404) [via validateTaskId middleware]
+       ├── GET    /tasks         → Task.find() (200)
+       ├── GET    /tasks/:id     → Task.findById() (200 / 400 / 404) [via validateTaskId middleware]
+       ├── POST   /tasks         → Task.create() / save() (201 / 400) [triggers pre-save hook]
+       ├── PUT    /tasks/:id     → Task.findByIdAndUpdate() (200 / 400 / 404) [runValidators: true]
+       ├── DELETE /tasks/:id     → Task.findByIdAndDelete() (200 / 400 / 404)
        └── GET    /test-error    → Triggers deliberate error for testing
                      │
                      ▼
@@ -42,9 +56,22 @@ Client (Postman / Thunder Client / Browser)
                      │
                      ▼
        ┌───────────────────────────┐
-       │ 5. Global Error Handler   │  → Catches next(err), logs stack server-side, returns JSON (500)
+       │ 5. Global Error Handler   │  → Intercepts Mongoose ValidationError & CastError (400 / 500)
        └───────────────────────────┘
 ```
+
+---
+
+## 🛠️ Environment & Configuration
+
+Create a `.env` file in the root directory (refer to `.env.example`):
+
+```env
+PORT=5000
+MONGO_URI=mongodb://127.0.0.1:27017/task-manager-db
+```
+
+> **Note**: `.env` is excluded from git via `.gitignore` to protect environment variables.
 
 ---
 
@@ -52,29 +79,39 @@ Client (Postman / Thunder Client / Browser)
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18 or higher)
-- npm (comes with Node.js)
+- [MongoDB](https://www.mongodb.com/) (Local installation or MongoDB Atlas instance)
 
 ### Installation & Running
 
-1. **Clone or navigate to project directory**:
-   ```bash
-   cd task-manager-api
-   ```
-
-2. **Install dependencies**:
+1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-3. **Start the server**:
-   ```bash
-   # Production / Standard start
-   npm start
+2. **Start MongoDB**:
+   Ensure local MongoDB service is running on `mongodb://127.0.0.1:27017` (or provide an Atlas URI in `.env`).
 
-   # Development mode (auto-reload on Node 18+)
+3. **Start the Express server**:
+   ```bash
+   # Development mode (auto-reload)
    npm run dev
+
+   # Production mode
+   npm start
    ```
-   The server will run on `http://localhost:5000`.
+   The server will connect to MongoDB and run on `http://localhost:5000`.
+
+---
+
+## 📑 Mongoose Task Schema (`models/Task.js`)
+
+| Field | Type | Options / Constraints |
+| :--- | :--- | :--- |
+| `title` | `String` | **Required**, non-empty string validation, auto-trimmed via `pre('save')` hook |
+| `description` | `String` | Optional, defaults to `""` |
+| `completed` | `Boolean` | Defaults to `false` |
+| `priority` | `String` | Enum restricted to `['low', 'medium', 'high']`, defaults to `'medium'` |
+| `createdAt` | `Date` | Defaults to `Date.now` |
 
 ---
 
@@ -86,11 +123,11 @@ All requests and responses use `Content-Type: application/json`.
 
 | Method | Endpoint | Description | Status Codes |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/tasks` | Retrieve all tasks | `200 OK` |
-| `GET` | `/tasks/:id` | Retrieve single task by ID | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `POST` | `/tasks` | Create a new task | `201 Created`, `400 Bad Request` |
-| `PUT` | `/tasks/:id` | Update an existing task | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `DELETE` | `/tasks/:id` | Delete a task by ID | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `GET` | `/tasks` | Retrieve all tasks sorted by `createdAt` descending | `200 OK` |
+| `GET` | `/tasks/:id` | Retrieve single task by 24-character ObjectId | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `POST` | `/tasks` | Create a new task in MongoDB | `201 Created`, `400 Bad Request` |
+| `PUT` | `/tasks/:id` | Update an existing task in MongoDB | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `DELETE` | `/tasks/:id` | Delete a task by ObjectId | `200 OK`, `400 Bad Request`, `404 Not Found` |
 | `GET` | `/test-error` | Test global error handling middleware | `500 Internal Server Error` |
 
 ---
@@ -102,16 +139,13 @@ All requests and responses use `Content-Type: application/json`.
   ```json
   [
     {
-      "id": 1,
-      "title": "Learn Express Middleware",
-      "description": "Understand request lifecycle and next() function execution flow",
-      "completed": true
-    },
-    {
-      "id": 2,
-      "title": "Build RESTful API",
-      "description": "Implement full CRUD routes with Express and custom middleware pipeline",
-      "completed": false
+      "_id": "6a7772598920e509f34d92f8",
+      "title": "Learn Mongoose Schema Design",
+      "description": "Practical 5 tasks",
+      "completed": false,
+      "priority": "high",
+      "createdAt": "2026-08-08T18:15:53.433Z",
+      "__v": 0
     }
   ]
   ```
@@ -121,36 +155,44 @@ All requests and responses use `Content-Type: application/json`.
 * **Request Body**:
   ```json
   {
-    "title": "Setup Postman Collection",
-    "description": "Create test requests for Practical 4 endpoints",
-    "completed": false
+    "title": "  Learn Mongoose Schema Design   ",
+    "description": "Practical 5 tasks",
+    "priority": "high"
   }
   ```
 * **Response (`201 Created`)**:
   ```json
   {
-    "id": 3,
-    "title": "Setup Postman Collection",
-    "description": "Create test requests for Practical 4 endpoints",
-    "completed": false
+    "_id": "6a7772598920e509f34d92f8",
+    "title": "Learn Mongoose Schema Design",
+    "description": "Practical 5 tasks",
+    "completed": false,
+    "priority": "high",
+    "createdAt": "2026-08-08T18:15:53.433Z",
+    "__v": 0
   }
   ```
+  *(Note: Leading and trailing whitespace in `title` is automatically trimmed by the schema pre-save hook)*
 
 #### 3. PUT `/tasks/:id`
 * **Headers**: `Content-Type: application/json`
 * **Request Body**:
   ```json
   {
-    "completed": true
+    "completed": true,
+    "priority": "medium"
   }
   ```
 * **Response (`200 OK`)**:
   ```json
   {
-    "id": 3,
-    "title": "Setup Postman Collection",
-    "description": "Create test requests for Practical 4 endpoints",
-    "completed": true
+    "_id": "6a7772598920e509f34d92f8",
+    "title": "Learn Mongoose Schema Design",
+    "description": "Practical 5 tasks",
+    "completed": true,
+    "priority": "medium",
+    "createdAt": "2026-08-08T18:15:53.433Z",
+    "__v": 0
   }
   ```
 
@@ -160,34 +202,65 @@ All requests and responses use `Content-Type: application/json`.
   {
     "message": "Task deleted successfully",
     "task": {
-      "id": 3,
-      "title": "Setup Postman Collection",
-      "description": "Create test requests for Practical 4 endpoints",
-      "completed": true
+      "_id": "6a7772598920e509f34d92f8",
+      "title": "Learn Mongoose Schema Design",
+      "description": "Practical 5 tasks",
+      "completed": true,
+      "priority": "medium",
+      "createdAt": "2026-08-08T18:15:53.433Z",
+      "__v": 0
     }
   }
   ```
+
+#### 5. Validation Error Example (`400 Bad Request`)
+* **Request Body (Invalid priority)**:
+  ```json
+  {
+    "title": "Invalid Priority Task",
+    "priority": "urgent"
+  }
+  ```
+* **Response (`400 Bad Request`)**:
+  ```json
+  {
+    "error": "Validation Error",
+    "message": "Priority must be one of: low, medium, high",
+    "details": [
+      "Priority must be one of: low, medium, high"
+    ]
+  }
+  ```
+
 ---
 
-## 🧠 Key Questions & Viva Analysis Answers
+## 🧠 Key Questions & Theory Analysis
 
-### Q1: Why must the error handling middleware be defined last in the middleware chain?
-> **Answer**: Express processes middleware sequentially in the exact order they are declared using `app.use()`. Error-handling middleware functions are distinguished by accepting **4 parameters**: `(err, req, res, next)`. When an error is passed via `next(err)` inside any route or middleware, Express immediately halts standard middleware execution and jumps to the next error-handling middleware. If the error handler were placed before the routes, it would be registered prior to any error occurring and would fail to intercept errors thrown by routes downstream. Therefore, it **must be placed last** (after all route definitions and normal middleware) to serve as a catch-all for any uncaught errors.
-
----
-
-### Q2: What is the difference between `app.use()` and a route-specific middleware?
-> **Answer**:
-> * **`app.use()` (Global / Mount-point Middleware)**: Applies middleware globally across **all** HTTP methods (`GET`, `POST`, `PUT`, `DELETE`, etc.) for every incoming request (or matching path prefixes). Examples include request loggers, body parsers (`express.json()`), and CORS headers.
-> * **Route-Specific Middleware**: Passed directly into a specific route endpoint definition (e.g., `app.get('/tasks/:id', validateTaskId, handler)`). It executes **only** when a request matches both the specific HTTP method and the exact URL path pattern. It is ideal for targeted actions such as validating route parameters (`:id`), authenticating protected routes, or authorization checks.
+### Q1: What is the purpose of a schema in a NoSQL database like MongoDB, given that MongoDB itself is schema-less?
+> **Answer**:  
+> While MongoDB at the storage engine level is schemaless (allowing documents within a collection to have flexible and varying fields), building enterprise applications requires **predictable data structures and data integrity**.  
+> Mongoose provides an ODM (Object Data Modeling) schema layer on top of MongoDB that enforces:
+> 1. **Data Consistency**: Ensures documents conform to standard types (`String`, `Date`, `Boolean`, etc.) across all operations.
+> 2. **Business Rule Enforcement**: Defines required attributes, enum restrictions, default values, and custom validators before documents touch the database.
+> 3. **Application-Level Features**: Enables pre/post middleware hooks, virtual fields, and model helper methods that simplify application code.
 
 ---
 
-### Q3: Why is it considered bad practice to send raw error stack traces to the client?
-> **Answer**:
-> 1. **Security Vulnerability (Information Leakage)**: Raw error stack traces expose critical server infrastructure details, internal directory structures, file system paths, library versions, database connection parameters, and database query logic. Malicious actors can utilize this information to exploit known vulnerabilities.
-> 2. **Poor User Experience**: Stack traces contain verbose developer debugging output that is confusing and unhelpful to end users. Users should receive clear, user-friendly, structured JSON responses with appropriate HTTP status codes (e.g., `{ "error": "Something went wrong" }`).
-> 3. **Logging & Monitoring Standard**: Stack traces should be logged server-side (to console/log files or monitoring systems like Datadog/Sentry) for developers, while hiding internal implementation details from public clients.
+### Q2: Why is it important to define required fields and default values at the schema level rather than relying on frontend validation alone?
+> **Answer**:  
+> Relying solely on client-side/frontend validation is a severe security and architectural anti-pattern for several reasons:
+> 1. **Bypassing Frontend**: Malicious users, external API clients, cURL scripts, or Postman requests can easily bypass web frontend validation and send arbitrary payloads directly to backend endpoints.
+> 2. **Single Source of Truth**: Schema-level validation enforces data rules regardless of which client (web, mobile app, microservice, background worker) interacts with the database.
+> 3. **Data Pollution Protection**: Default values guaranteed at the schema level ensure essential fields (such as `completed: false` or `createdAt: Date.now`) are reliably populated even when clients omit them.
+
+---
+
+### Q3: What happens internally when a document fails Mongoose validation — where is the request stopped?
+> **Answer**:  
+> Mongoose performs schema validation **completely inside the Node.js runtime process before sending any write command to the MongoDB server**.
+> 1. When `doc.save()` or `findByIdAndUpdate(..., { runValidators: true })` is called, Mongoose evaluates document fields against defined schema validators and pre-save hooks.
+> 2. If any validation rule fails, Mongoose immediately aborts the operation and constructs a `ValidationError` object containing field-level error messages. **No network request or write operation is transmitted to the MongoDB database engine.**
+> 3. The rejected Promise throws an exception caught inside the endpoint's `try/catch` block, which forwards `err` via `next(err)` to Express's global error handler to return a formatted `400 Bad Request` JSON response to the client.
 
 ---
 
@@ -195,8 +268,13 @@ All requests and responses use `Content-Type: application/json`.
 
 ```text
 task-manager-api/
-├── package.json        # Dependencies & scripts
-├── server.js          # Express app, middleware pipeline & CRUD routes
-├── .gitignore          # Ignores node_modules and log files
-└── README.md           # Documentation & Viva Q&A
+├── models/
+│   └── Task.js         # Mongoose schema, validation rules & pre-save hook
+├── .env                # Local environment variables (DB URI, Port)
+├── .env.example        # Environment variables template
+├── .gitignore          # Excludes node_modules and .env
+├── package.json        # Dependencies (express, mongoose, dotenv)
+├── server.js          # Express app, Mongoose connection & REST API routes
+├── MATURITY.md         # Richardson Maturity Model Evaluation Report
+└── README.md           # Documentation & Practical 5 Viva Q&A
 ```
