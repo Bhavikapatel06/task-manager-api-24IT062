@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
 require('dotenv').config();
 const Task = require('./models/Task');
 
@@ -15,7 +16,12 @@ mongoose.connect(MONGO_URI)
   .catch((err) => console.error('MongoDB connection error:', err));
 
 // ==========================================
-// 2. Global Request Logging Middleware
+// 2. Enable CORS (Cross-Origin Resource Sharing)
+// ==========================================
+app.use(cors());
+
+// ==========================================
+// 3. Global Request Logging Middleware
 // ==========================================
 // Logs HTTP method, URL, and timestamp for every incoming request
 app.use((req, res, next) => {

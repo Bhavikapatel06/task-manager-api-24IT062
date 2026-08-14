@@ -1,266 +1,59 @@
-# Practical 5: MongoDB Integration and Schema Design with Mongoose
-
-**Technology Stack**: Node.js (v18+), Express.js, MongoDB, Mongoose ODM, dotenv
-
-A RESTful Task Management API extended from Practical 4 to integrate MongoDB via Mongoose. Features schema validation, pre-save hooks for data sanitization, full CRUD database operations, custom middleware, and structured JSON error responses.
+# Practical 6: Full Stack Integration React + Node + MongoDB
+<!-- 
+**CHAROTAR UNIVERSITY OF SCIENCE AND TECHNOLOGY**  
+**FACULTY OF TECHNOLOGY AND ENGINEERING**  
+**B. TECH (IT/CE/CSE/AIML)**  
+**ADVANCED WEB DEVELOPMENT FRAMEWORKS (ITUE301)**  
+**Course Outcomes / Program Outcomes**: CO1, CO2 / PO3, PO5 
+-->
 
 ---
 
-## 📌 Architecture & Data Flow
+## 📌 Overview & Objective
+
+To wire the **React frontend** to the **Node.js/Express/MongoDB backend** into a fully functional, end-to-end full-stack MERN task management application with robust state synchronization, CORS support, optimistic UI updates, confirmation dialogs, and toast notifications.
+
+---
+
+## 🏗️ Architecture & Full-Stack Data Flow
 
 ```text
-Express App
-    │
-    ▼
-Mongoose ODM (Schema Validation & Model Hooks)
-    │
-    ▼
-MongoDB Database
-    └── tasks collection
-        { _id, title, description, completed, priority, createdAt, __v }
+React Frontend (Vite @ localhost:5173)
+        │
+        │  fetch() JSON API Calls (CORS enabled)
+        ▼
+Express Backend (Node.js @ localhost:5000)
+        │
+        │  Mongoose ODM (Validation & Hooks)
+        ▼
+MongoDB Database (localhost:27017/task-manager-db)
+        └── tasks collection
 ```
 
-### Request Processing & Middleware Pipeline
-
-```text
-Client (Postman / Thunder Client / Browser)
-                     │
-                     ▼
-       ┌───────────────────────────┐
-       │  1. Logging Middleware    │  → Logs [METHOD] [URL] - [Timestamp]
-       └─────────────┬─────────────┘
-                     │
-                     ▼
-       ┌───────────────────────────┐
-       │  2. express.json()        │  → Parses JSON request payloads
-       └─────────────┬─────────────┘
-                     │
-                     ▼
-       ┌───────────────────────────┐
-       │  3. JSON Header Validator │  → Rejects POST/PUT missing Content-Type: application/json (400)
-       └─────────────┬─────────────┘
-                     │
-                     ▼
-               Express Router
-       ├── GET    /tasks         → Task.find() (200)
-       ├── GET    /tasks/:id     → Task.findById() (200 / 400 / 404) [via validateTaskId middleware]
-       ├── POST   /tasks         → Task.create() / save() (201 / 400) [triggers pre-save hook]
-       ├── PUT    /tasks/:id     → Task.findByIdAndUpdate() (200 / 400 / 404) [runValidators: true]
-       ├── DELETE /tasks/:id     → Task.findByIdAndDelete() (200 / 400 / 404)
-       └── GET    /test-error    → Triggers deliberate error for testing
-                     │
-                     ▼
-       ┌───────────────────────────┐
-       │  4. Undefined Route (404) │  → Returns structured JSON for unmapped paths (404)
-       └─────────────┬─────────────┘
-                     │
-                     ▼
-       ┌───────────────────────────┐
-       │ 5. Global Error Handler   │  → Intercepts Mongoose ValidationError & CastError (400 / 500)
-       └───────────────────────────┘
-```
+### End-to-End Operation Flow:
+1. **Create**: User submits UI form → Optimistic local UI insert → `POST /tasks` with JSON payload → MongoDB saves document → Server returns 201 Created → Local state confirmed.
+2. **Read**: React component mounts (`useEffect`) → `GET /tasks` → MongoDB queries collection (`Task.find()`) → UI renders tasks with metrics & filters.
+3. **Update**: User edits task or clicks completion toggle → `PUT /tasks/:id` → MongoDB updates document (`findByIdAndUpdate`) → State synchronized & success toast displayed.
+4. **Delete**: User clicks delete → Interactive confirmation modal displayed → `DELETE /tasks/:id` → MongoDB removes record (`findByIdAndDelete`) → UI removes item & triggers notification.
 
 ---
 
-## 🛠️ Environment & Configuration
+## 🚀 Key Features Implemented
 
-Create a `.env` file in the root directory (refer to `.env.example`):
-
-```env
-PORT=5000
-MONGO_URI=mongodb://127.0.0.1:27017/task-manager-db
-```
-
-> **Note**: `.env` is excluded from git via `.gitignore` to protect environment variables.
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [MongoDB](https://www.mongodb.com/) (Local installation or MongoDB Atlas instance)
-
-### Installation & Running
-
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-2. **Start MongoDB**:
-   Ensure local MongoDB service is running on `mongodb://127.0.0.1:27017` (or provide an Atlas URI in `.env`).
-
-3. **Start the Express server**:
-   ```bash
-   # Development mode (auto-reload)
-   npm run dev
-
-   # Production mode
-   npm start
-   ```
-   The server will connect to MongoDB and run on `http://localhost:5000`.
-
----
-
-## 📑 Mongoose Task Schema (`models/Task.js`)
-
-| Field | Type | Options / Constraints |
-| :--- | :--- | :--- |
-| `title` | `String` | **Required**, non-empty string validation, auto-trimmed via `pre('save')` hook |
-| `description` | `String` | Optional, defaults to `""` |
-| `completed` | `Boolean` | Defaults to `false` |
-| `priority` | `String` | Enum restricted to `['low', 'medium', 'high']`, defaults to `'medium'` |
-| `createdAt` | `Date` | Defaults to `Date.now` |
-
----
-
-## 📑 RESTful API Reference
-
-All requests and responses use `Content-Type: application/json`.
-
-### Endpoints Overview
-
-| Method | Endpoint | Description | Status Codes |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/tasks` | Retrieve all tasks sorted by `createdAt` descending | `200 OK` |
-| `GET` | `/tasks/:id` | Retrieve single task by 24-character ObjectId | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `POST` | `/tasks` | Create a new task in MongoDB | `201 Created`, `400 Bad Request` |
-| `PUT` | `/tasks/:id` | Update an existing task in MongoDB | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `DELETE` | `/tasks/:id` | Delete a task by ObjectId | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `GET` | `/test-error` | Test global error handling middleware | `500 Internal Server Error` |
-
----
-
-### Request & Response Examples
-
-#### 1. GET `/tasks`
-* **Response (`200 OK`)**:
-  ```json
-  [
-    {
-      "_id": "6a7772598920e509f34d92f8",
-      "title": "Learn Mongoose Schema Design",
-      "description": "Practical 5 tasks",
-      "completed": false,
-      "priority": "high",
-      "createdAt": "2026-08-08T18:15:53.433Z",
-      "__v": 0
-    }
-  ]
-  ```
-
-#### 2. POST `/tasks`
-* **Headers**: `Content-Type: application/json`
-* **Request Body**:
-  ```json
-  {
-    "title": "  Learn Mongoose Schema Design   ",
-    "description": "Practical 5 tasks",
-    "priority": "high"
-  }
-  ```
-* **Response (`201 Created`)**:
-  ```json
-  {
-    "_id": "6a7772598920e509f34d92f8",
-    "title": "Learn Mongoose Schema Design",
-    "description": "Practical 5 tasks",
-    "completed": false,
-    "priority": "high",
-    "createdAt": "2026-08-08T18:15:53.433Z",
-    "__v": 0
-  }
-  ```
-  *(Note: Leading and trailing whitespace in `title` is automatically trimmed by the schema pre-save hook)*
-
-#### 3. PUT `/tasks/:id`
-* **Headers**: `Content-Type: application/json`
-* **Request Body**:
-  ```json
-  {
-    "completed": true,
-    "priority": "medium"
-  }
-  ```
-* **Response (`200 OK`)**:
-  ```json
-  {
-    "_id": "6a7772598920e509f34d92f8",
-    "title": "Learn Mongoose Schema Design",
-    "description": "Practical 5 tasks",
-    "completed": true,
-    "priority": "medium",
-    "createdAt": "2026-08-08T18:15:53.433Z",
-    "__v": 0
-  }
-  ```
-
-#### 4. DELETE `/tasks/:id`
-* **Response (`200 OK`)**:
-  ```json
-  {
-    "message": "Task deleted successfully",
-    "task": {
-      "_id": "6a7772598920e509f34d92f8",
-      "title": "Learn Mongoose Schema Design",
-      "description": "Practical 5 tasks",
-      "completed": true,
-      "priority": "medium",
-      "createdAt": "2026-08-08T18:15:53.433Z",
-      "__v": 0
-    }
-  }
-  ```
-
-#### 5. Validation Error Example (`400 Bad Request`)
-* **Request Body (Invalid priority)**:
-  ```json
-  {
-    "title": "Invalid Priority Task",
-    "priority": "urgent"
-  }
-  ```
-* **Response (`400 Bad Request`)**:
-  ```json
-  {
-    "error": "Validation Error",
-    "message": "Priority must be one of: low, medium, high",
-    "details": [
-      "Priority must be one of: low, medium, high"
-    ]
-  }
-  ```
-
----
-
-## 🧠 Key Questions & Theory Analysis
-
-### Q1: What is the purpose of a schema in a NoSQL database like MongoDB, given that MongoDB itself is schema-less?
-> **Answer**:  
-> While MongoDB at the storage engine level is schemaless (allowing documents within a collection to have flexible and varying fields), building enterprise applications requires **predictable data structures and data integrity**.  
-> Mongoose provides an ODM (Object Data Modeling) schema layer on top of MongoDB that enforces:
-> 1. **Data Consistency**: Ensures documents conform to standard types (`String`, `Date`, `Boolean`, etc.) across all operations.
-> 2. **Business Rule Enforcement**: Defines required attributes, enum restrictions, default values, and custom validators before documents touch the database.
-> 3. **Application-Level Features**: Enables pre/post middleware hooks, virtual fields, and model helper methods that simplify application code.
-
----
-
-### Q2: Why is it important to define required fields and default values at the schema level rather than relying on frontend validation alone?
-> **Answer**:  
-> Relying solely on client-side/frontend validation is a severe security and architectural anti-pattern for several reasons:
-> 1. **Bypassing Frontend**: Malicious users, external API clients, cURL scripts, or Postman requests can easily bypass web frontend validation and send arbitrary payloads directly to backend endpoints.
-> 2. **Single Source of Truth**: Schema-level validation enforces data rules regardless of which client (web, mobile app, microservice, background worker) interacts with the database.
-> 3. **Data Pollution Protection**: Default values guaranteed at the schema level ensure essential fields (such as `completed: false` or `createdAt: Date.now`) are reliably populated even when clients omit them.
-
----
-
-### Q3: What happens internally when a document fails Mongoose validation — where is the request stopped?
-> **Answer**:  
-> Mongoose performs schema validation **completely inside the Node.js runtime process before sending any write command to the MongoDB server**.
-> 1. When `doc.save()` or `findByIdAndUpdate(..., { runValidators: true })` is called, Mongoose evaluates document fields against defined schema validators and pre-save hooks.
-> 2. If any validation rule fails, Mongoose immediately aborts the operation and constructs a `ValidationError` object containing field-level error messages. **No network request or write operation is transmitted to the MongoDB database engine.**
-> 3. The rejected Promise throws an exception caught inside the endpoint's `try/catch` block, which forwards `err` via `next(err)` to Express's global error handler to return a formatted `400 Bad Request` JSON response to the client.
+1. **CORS Configuration**:
+   - `cors` middleware enabled on the Express server (`app.use(cors())`) allowing cross-origin requests from the React dev server (`localhost:5173` to `localhost:5000`).
+2. **Centralized API Client (`client/src/api.js`)**:
+   - Modular helper functions (`getTasks`, `getTaskById`, `createTask`, `updateTask`, `deleteTask`) consuming backend REST endpoints.
+3. **Optimistic UI Updates**:
+   - Immediate feedback on task creation with instant UI insertion, followed by asynchronous server confirmation and rollback on network failure.
+4. **Interactive Confirmation Dialog (`ConfirmModal`)**:
+   - Prevents accidental deletions by requiring explicit user confirmation before executing `DELETE /tasks/:id`.
+5. **Toast Notification System (`Toast`)**:
+   - Real-time feedback alerts for successful creation, editing, deletion, completion toggling, or backend connection errors.
+6. **Live Dashboard Metrics (`StatsCard`)**:
+   - Real-time aggregation of Total Tasks, In Progress, Completed, and High Priority tasks.
+7. **Task Search & Filtering (`TaskList`)**:
+   - Instant search by title/description keywords and filtering by status (All / Pending / Completed).
 
 ---
 
@@ -268,13 +61,101 @@ All requests and responses use `Content-Type: application/json`.
 
 ```text
 task-manager-api/
+├── client/                     # React Frontend (Vite + React 18)
+│   ├── public/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ConfirmModal.jsx # Deletion confirmation dialog
+│   │   │   ├── Navbar.jsx       # Header with live backend connection badge
+│   │   │   ├── StatsCard.jsx    # Dashboard metric overview
+│   │   │   ├── TaskForm.jsx     # Create & Edit form with priority selector
+│   │   │   ├── TaskItem.jsx     # Individual task card with actions
+│   │   │   ├── TaskList.jsx     # Filterable and searchable task list
+│   │   │   └── Toast.jsx        # Notification alert system
+│   │   ├── api.js               # Central backend API client
+│   │   ├── App.jsx              # Root full-stack state container
+│   │   ├── index.css            # Modern glassmorphic theme styling
+│   │   └── main.jsx             # React entry point
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
 ├── models/
-│   └── Task.js         # Mongoose schema, validation rules & pre-save hook
-├── .env                # Local environment variables (DB URI, Port)
-├── .env.example        # Environment variables template
-├── .gitignore          # Excludes node_modules and .env
-├── package.json        # Dependencies (express, mongoose, dotenv)
-├── server.js          # Express app, Mongoose connection & REST API routes
-├── MATURITY.md         # Richardson Maturity Model Evaluation Report
-└── README.md           # Documentation & Practical 5 Viva Q&A
+│   └── Task.js                 # Mongoose Schema with validation & pre-save hook
+├── .env.example                # Sample environment variables
+├── package.json                # Root package configuration
+├── README.md                   # Full documentation and guide
+└── server.js                   # Express server with CORS & REST routes
 ```
+
+---
+
+## 🛠️ Installation & Setup Guide
+
+### 1. Prerequisites
+- **Node.js**: v18.0.0 or higher
+- **MongoDB**: Local MongoDB instance running on `mongodb://127.0.0.1:27017` or MongoDB Atlas URI
+
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory:
+```env
+PORT=5000
+MONGO_URI=mongodb://127.0.0.1:27017/task-manager-db
+```
+
+### 3. Install Dependencies
+In the root directory, install backend and frontend dependencies:
+```bash
+# Install backend dependencies (express, mongoose, cors, dotenv)
+npm install
+
+# Install frontend dependencies
+npm run client:install
+```
+
+---
+
+## 🏃 Running the Application
+
+For full-stack execution, run the backend and frontend simultaneously in separate terminals:
+
+### Terminal 1: Backend Server (Port 5000)
+```bash
+npm run dev
+# Server running on http://localhost:5000
+```
+
+### Terminal 2: Frontend Dev Server (Port 5173)
+```bash
+npm run client
+# React app available at http://localhost:5173
+```
+
+---
+
+## 📡 REST API Specification
+
+| Method | Endpoint | Description | Request Body | Response Code |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/tasks` | Retrieve all tasks sorted newest first | None | `200 OK` |
+| `GET` | `/tasks/:id` | Retrieve single task by MongoDB ObjectId | None | `200 OK` / `404 Not Found` |
+| `POST` | `/tasks` | Create a new task | `{ title, description?, priority?, completed? }` | `201 Created` / `400 Bad Request` |
+| `PUT` | `/tasks/:id` | Update task details or toggle completion | `{ title?, description?, priority?, completed? }` | `200 OK` / `404 Not Found` |
+| `DELETE` | `/tasks/:id` | Delete task by ID | None | `200 OK` / `404 Not Found` |
+
+---
+
+## ❓ Key Questions & Conceptual Analysis
+
+### 1. What changes are required on the backend (CORS) to allow the React dev server to call the Express API?
+Browsers enforce the **Same-Origin Policy** (SOP) by default, blocking web apps on one origin (e.g. `http://localhost:5173`) from making fetch requests to another origin (e.g. `http://localhost:5000`). To allow communication, Express must attach CORS headers (such as `Access-Control-Allow-Origin: *` or specific origin) to HTTP responses. This is configured via the `cors` package:
+```javascript
+const cors = require('cors');
+app.use(cors());
+```
+
+### 2. Why should the UI re-fetch or update local state after a successful POST/PUT/DELETE rather than assuming success silently?
+- **Data Integrity**: MongoDB generates primary keys (`_id`), server timestamps (`createdAt`), default values, and schema sanitization (such as `.trim()` hooks). Local state must reflect the true database record.
+- **Error Recovery**: If a server-side validation error or network drop occurs, assuming success leads to ghost UI states that vanish upon browser refresh.
+
+### 3. What is the risk of not handling errors on write operations (POST/PUT/DELETE) the same way as read operations (GET)?
+Without write error handling, users receive false confidence that their data was saved. If a database disconnect or validation failure occurs during a POST or PUT, the user might close the browser and permanently lose unsaved work. Proper write error handling catches exceptions, rolls back optimistic UI changes, and provides actionable error notifications to the user.
