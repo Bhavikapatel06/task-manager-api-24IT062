@@ -1,12 +1,24 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+
 const Task = require('./models/Task');
+const User = require('./models/User');
+const auth = require('./middleware/auth');
+const {
+  validateRegisterInput,
+  validateLoginInput,
+  validateTaskInput
+} = require('./middleware/validate');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/task-manager-db';
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_practical7_jwt_signing_key_2026_awdf';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 
 // ==========================================
 // 1. Database Connection
@@ -23,7 +35,6 @@ app.use(cors());
 // ==========================================
 // 3. Global Request Logging Middleware
 // ==========================================
-// Logs HTTP method, URL, and timestamp for every incoming request
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
   next();
@@ -33,7 +44,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // ==========================================
-// 3. Custom Middleware: Content-Type Validator
+// 4. Custom Middleware: Content-Type Validator
 // ==========================================
 // Rejects POST and PUT requests without Content-Type: application/json header
 const validateJsonHeader = (req, res, next) => {
@@ -52,9 +63,8 @@ const validateJsonHeader = (req, res, next) => {
 app.use(validateJsonHeader);
 
 // ==========================================
-// 4. Route-Specific Middleware: Task ID Validator
+// 5. Route-Specific Middleware: Task ID Validator
 // ==========================================
-// Validates that the task ID parameter is a valid 24-character hexadecimal MongoDB ObjectId
 const validateTaskId = (req, res, next) => {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -67,21 +77,165 @@ const validateTaskId = (req, res, next) => {
 };
 
 // ==========================================
-// 5. RESTful API Routes (CRUD Operations with Mongoose)
+// 6. Authentication Routes (Practical 7)
 // ==========================================
 
-// GET /tasks - Retrieve all tasks
-app.get('/tasks', async (req, res, next) => {
+// Helper function to handle registration
+const handleRegister = async (req, res, next) => {
   try {
-    const tasks = await Task.find().sort({ createdAt: -1 });
+    const { name, email, password } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check for existing user
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Email address is already registered. Please log in or use another email.'
+      });
+    }
+
+    // Step 3: Hash password with bcrypt before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+      name: name ? name.trim() : '',
+      email: normalizedEmail,
+      password: hashedPassword
+    });
+
+    const savedUser = await newUser.save();
+
+    // Step 4: Sign JWT
+    const token = jwt.sign(
+      { id: savedUser._id, email: savedUser.email, name: savedUser.name },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      token,
+      user: {
+        _id: savedUser._id,
+        name: savedUser.name,
+        email: savedUser.email,
+        createdAt: savedUser.createdAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Helper function to handle login
+const handleLogin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Step 4: Verify user exists and compare password using bcrypt
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid email or password.'
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid email or password.'
+      });
+    }
+
+    // Sign JWT token
+    const token = jwt.sign(
+      { id: user._id, email: user.email, name: user.name },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Helper function to handle /me profile retrieval
+const handleGetMe = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User profile not found.'
+      });
+    }
+    res.status(200).json({
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /auth/register & /api/auth/register
+app.post('/auth/register', validateRegisterInput, handleRegister);
+app.post('/api/auth/register', validateRegisterInput, handleRegister);
+
+// POST /auth/login & /api/auth/login
+app.post('/auth/login', validateLoginInput, handleLogin);
+app.post('/api/auth/login', validateLoginInput, handleLogin);
+
+// GET /auth/me, /api/auth/me & /me (Protected by auth middleware)
+app.get('/auth/me', auth, handleGetMe);
+app.get('/api/auth/me', auth, handleGetMe);
+app.get('/me', auth, handleGetMe);
+
+// ==========================================
+// 7. Protected RESTful Task Routes (Practical 7)
+// ==========================================
+
+// GET /tasks & /api/tasks - Retrieve all tasks for authenticated user
+const handleGetTasks = async (req, res, next) => {
+  try {
+    // Return user's tasks or unassigned legacy tasks
+    const tasks = await Task.find({
+      $or: [
+        { user: req.user.id },
+        { user: { $exists: false } },
+        { user: null }
+      ]
+    }).sort({ createdAt: -1 });
+
     res.status(200).json(tasks);
   } catch (err) {
     next(err);
   }
-});
+};
 
-// GET /tasks/:id - Retrieve a single task by ID
-app.get('/tasks/:id', validateTaskId, async (req, res, next) => {
+app.get('/tasks', auth, handleGetTasks);
+app.get('/api/tasks', auth, handleGetTasks);
+
+// GET /tasks/:id & /api/tasks/:id - Retrieve single task by ID
+const handleGetTaskById = async (req, res, next) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) {
@@ -90,21 +244,34 @@ app.get('/tasks/:id', validateTaskId, async (req, res, next) => {
         message: `Task with ID ${req.params.id} not found.`
       });
     }
+
+    // Enforce task ownership if assigned to a user
+    if (task.user && task.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied: You do not have permission to view this task.'
+      });
+    }
+
     res.status(200).json(task);
   } catch (err) {
     next(err);
   }
-});
+};
 
-// POST /tasks - Create a new task
-app.post('/tasks', async (req, res, next) => {
+app.get('/tasks/:id', auth, validateTaskId, handleGetTaskById);
+app.get('/api/tasks/:id', auth, validateTaskId, handleGetTaskById);
+
+// POST /tasks & /api/tasks - Create a new task (Protected + Input Validated)
+const handleCreateTask = async (req, res, next) => {
   try {
     const { title, description, completed, priority } = req.body;
     const newTask = new Task({
       title,
       description,
       completed,
-      priority
+      priority,
+      user: req.user.id
     });
     const savedTask = await newTask.save();
     res.setHeader('Location', `/tasks/${savedTask._id}`);
@@ -112,38 +279,65 @@ app.post('/tasks', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+};
 
-// PUT /tasks/:id - Update an existing task by ID
-app.put('/tasks/:id', validateTaskId, async (req, res, next) => {
+app.post('/tasks', auth, validateTaskInput, handleCreateTask);
+app.post('/api/tasks', auth, validateTaskInput, handleCreateTask);
+
+// PUT /tasks/:id & /api/tasks/:id - Update an existing task by ID
+const handleUpdateTask = async (req, res, next) => {
   try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `Task with ID ${req.params.id} not found.`
+      });
+    }
+
+    // Enforce task ownership
+    if (task.user && task.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied: You do not have permission to modify this task.'
+      });
+    }
+
     const updatedTask = await Task.findByIdAndUpdate(
       req.params.id,
       req.body,
       { returnDocument: 'after', runValidators: true }
     );
-    if (!updatedTask) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: `Task with ID ${req.params.id} not found.`
-      });
-    }
+
     res.status(200).json(updatedTask);
   } catch (err) {
     next(err);
   }
-});
+};
 
-// DELETE /tasks/:id - Delete a task by ID
-app.delete('/tasks/:id', validateTaskId, async (req, res, next) => {
+app.put('/tasks/:id', auth, validateTaskId, validateTaskInput, handleUpdateTask);
+app.put('/api/tasks/:id', auth, validateTaskId, validateTaskInput, handleUpdateTask);
+
+// DELETE /tasks/:id & /api/tasks/:id - Delete a task by ID
+const handleDeleteTask = async (req, res, next) => {
   try {
-    const deletedTask = await Task.findByIdAndDelete(req.params.id);
-    if (!deletedTask) {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
       return res.status(404).json({
         error: 'Not Found',
         message: `Task with ID ${req.params.id} not found.`
       });
     }
+
+    // Enforce task ownership
+    if (task.user && task.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied: You do not have permission to delete this task.'
+      });
+    }
+
+    const deletedTask = await Task.findByIdAndDelete(req.params.id);
     res.status(200).json({
       message: 'Task deleted successfully',
       task: deletedTask
@@ -151,7 +345,10 @@ app.delete('/tasks/:id', validateTaskId, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+};
+
+app.delete('/tasks/:id', auth, validateTaskId, handleDeleteTask);
+app.delete('/api/tasks/:id', auth, validateTaskId, handleDeleteTask);
 
 // GET /test-error - Demo route to test global error handling middleware
 app.get('/test-error', (req, res, next) => {
@@ -160,9 +357,8 @@ app.get('/test-error', (req, res, next) => {
 });
 
 // ==========================================
-// 6. 404 Handler for Undefined Routes
+// 8. 404 Handler for Undefined Routes
 // ==========================================
-// Catches any requests to routes that were not defined above
 app.use((req, res, next) => {
   res.status(404).json({
     error: 'Route Not Found',
@@ -171,9 +367,8 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
-// 7. Global Error Handling Middleware
+// 9. Global Error Handling Middleware
 // ==========================================
-// Intercepts Mongoose ValidationErrors and CastErrors to return structured JSON
 app.use((err, req, res, next) => {
   console.error('[Global Error Handler Log]:', err.message);
 
@@ -186,10 +381,24 @@ app.use((err, req, res, next) => {
     });
   }
 
+  if (err.code === 11000) {
+    return res.status(400).json({
+      error: 'Conflict Error',
+      message: 'Duplicate key error: A record with this unique field already exists.'
+    });
+  }
+
   if (err.name === 'CastError') {
     return res.status(400).json({
       error: 'Bad Request',
       message: `Invalid format for field "${err.path}".`
+    });
+  }
+
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Authentication token error.'
     });
   }
 
