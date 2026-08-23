@@ -1,161 +1,212 @@
-# Practical 6: Full Stack Integration React + Node + MongoDB
-<!-- 
-**CHAROTAR UNIVERSITY OF SCIENCE AND TECHNOLOGY**  
-**FACULTY OF TECHNOLOGY AND ENGINEERING**  
-**B. TECH (IT/CE/CSE/AIML)**  
-**ADVANCED WEB DEVELOPMENT FRAMEWORKS (ITUE301)**  
-**Course Outcomes / Program Outcomes**: CO1, CO2 / PO3, PO5 
--->
+# Practical 7 - Authentication and Middleware Pipeline
 
----
+## ITUE301 - Advanced Web Development Frameworks
 
-## 📌 Overview & Objective
+A Task Management application with JWT authentication, bcrypt password hashing, Express middleware, and server-side input validation.
 
-To wire the **React frontend** to the **Node.js/Express/MongoDB backend** into a fully functional, end-to-end full-stack MERN task management application with robust state synchronization, CORS support, optimistic UI updates, confirmation dialogs, and toast notifications.
+## Features
 
----
+* User registration and login
+* Password hashing using bcryptjs
+* JWT authentication with 1 hour expiry
+* Protected task routes
+* Server-side input validation
+* `/auth/me` endpoint
+* User-specific tasks
+* 401 handling for invalid or expired tokens
+* Logout functionality
 
-## 🏗️ Architecture & Full-Stack Data Flow
+## Technologies
 
-```text
-React Frontend (Vite @ localhost:5173)
-        │
-        │  fetch() JSON API Calls (CORS enabled)
-        ▼
-Express Backend (Node.js @ localhost:5000)
-        │
-        │  Mongoose ODM (Validation & Hooks)
-        ▼
-MongoDB Database (localhost:27017/task-manager-db)
-        └── tasks collection
-```
+* Node.js
+* Express.js
+* MongoDB
+* Mongoose
+* React
+* JWT (`jsonwebtoken`)
+* bcryptjs
+* Postman
 
-### End-to-End Operation Flow:
-1. **Create**: User submits UI form → Optimistic local UI insert → `POST /tasks` with JSON payload → MongoDB saves document → Server returns 201 Created → Local state confirmed.
-2. **Read**: React component mounts (`useEffect`) → `GET /tasks` → MongoDB queries collection (`Task.find()`) → UI renders tasks with metrics & filters.
-3. **Update**: User edits task or clicks completion toggle → `PUT /tasks/:id` → MongoDB updates document (`findByIdAndUpdate`) → State synchronized & success toast displayed.
-4. **Delete**: User clicks delete → Interactive confirmation modal displayed → `DELETE /tasks/:id` → MongoDB removes record (`findByIdAndDelete`) → UI removes item & triggers notification.
+## Installation
 
----
+Install the backend dependencies:
 
-## 🚀 Key Features Implemented
-
-1. **CORS Configuration**:
-   - `cors` middleware enabled on the Express server (`app.use(cors())`) allowing cross-origin requests from the React dev server (`localhost:5173` to `localhost:5000`).
-2. **Centralized API Client (`client/src/api.js`)**:
-   - Modular helper functions (`getTasks`, `getTaskById`, `createTask`, `updateTask`, `deleteTask`) consuming backend REST endpoints.
-3. **Optimistic UI Updates**:
-   - Immediate feedback on task creation with instant UI insertion, followed by asynchronous server confirmation and rollback on network failure.
-4. **Interactive Confirmation Dialog (`ConfirmModal`)**:
-   - Prevents accidental deletions by requiring explicit user confirmation before executing `DELETE /tasks/:id`.
-5. **Toast Notification System (`Toast`)**:
-   - Real-time feedback alerts for successful creation, editing, deletion, completion toggling, or backend connection errors.
-6. **Live Dashboard Metrics (`StatsCard`)**:
-   - Real-time aggregation of Total Tasks, In Progress, Completed, and High Priority tasks.
-7. **Task Search & Filtering (`TaskList`)**:
-   - Instant search by title/description keywords and filtering by status (All / Pending / Completed).
-
----
-
-## 📁 Repository Structure
-
-```text
-task-manager-api/
-├── client/                     # React Frontend (Vite + React 18)
-│   ├── public/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ConfirmModal.jsx # Deletion confirmation dialog
-│   │   │   ├── Navbar.jsx       # Header with live backend connection badge
-│   │   │   ├── StatsCard.jsx    # Dashboard metric overview
-│   │   │   ├── TaskForm.jsx     # Create & Edit form with priority selector
-│   │   │   ├── TaskItem.jsx     # Individual task card with actions
-│   │   │   ├── TaskList.jsx     # Filterable and searchable task list
-│   │   │   └── Toast.jsx        # Notification alert system
-│   │   ├── api.js               # Central backend API client
-│   │   ├── App.jsx              # Root full-stack state container
-│   │   ├── index.css            # Modern glassmorphic theme styling
-│   │   └── main.jsx             # React entry point
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-├── models/
-│   └── Task.js                 # Mongoose Schema with validation & pre-save hook
-├── .env.example                # Sample environment variables
-├── package.json                # Root package configuration
-├── README.md                   # Full documentation and guide
-└── server.js                   # Express server with CORS & REST routes
-```
-
----
-
-## 🛠️ Installation & Setup Guide
-
-### 1. Prerequisites
-- **Node.js**: v18.0.0 or higher
-- **MongoDB**: Local MongoDB instance running on `mongodb://127.0.0.1:27017` or MongoDB Atlas URI
-
-### 2. Configure Environment Variables
-Create a `.env` file in the root directory:
-```env
-PORT=5000
-MONGO_URI=mongodb://127.0.0.1:27017/task-manager-db
-```
-
-### 3. Install Dependencies
-In the root directory, install backend and frontend dependencies:
 ```bash
-# Install backend dependencies (express, mongoose, cors, dotenv)
 npm install
+```
 
-# Install frontend dependencies
+Install frontend dependencies:
+
+```bash
 npm run client:install
 ```
 
----
+## Environment Variables
 
-## 🏃 Running the Application
+Create a `.env` file in the project root:
 
-For full-stack execution, run the backend and frontend simultaneously in separate terminals:
+```env
+PORT=5000
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_secret_key
+JWT_EXPIRES_IN=1h
+```
 
-### Terminal 1: Backend Server (Port 5000)
+Do not upload `.env` to GitHub.
+
+Add this to `.gitignore`:
+
+```text
+.env
+node_modules/
+```
+
+## Run the Project
+
+Start the backend:
+
 ```bash
 npm run dev
-# Server running on http://localhost:5000
 ```
 
-### Terminal 2: Frontend Dev Server (Port 5173)
+Start the frontend:
+
 ```bash
 npm run client
-# React app available at http://localhost:5173
 ```
 
----
+Backend:
 
-## 📡 REST API Specification
+```text
+http://localhost:5000
+```
 
-| Method | Endpoint | Description | Request Body | Response Code |
-| :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/tasks` | Retrieve all tasks sorted newest first | None | `200 OK` |
-| `GET` | `/tasks/:id` | Retrieve single task by MongoDB ObjectId | None | `200 OK` / `404 Not Found` |
-| `POST` | `/tasks` | Create a new task | `{ title, description?, priority?, completed? }` | `201 Created` / `400 Bad Request` |
-| `PUT` | `/tasks/:id` | Update task details or toggle completion | `{ title?, description?, priority?, completed? }` | `200 OK` / `404 Not Found` |
-| `DELETE` | `/tasks/:id` | Delete task by ID | None | `200 OK` / `404 Not Found` |
+Frontend:
 
----
+```text
+http://localhost:5173
+```
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint         | Purpose               |
+| ------ | ---------------- | --------------------- |
+| POST   | `/auth/register` | Register a new user   |
+| POST   | `/auth/login`    | Login and receive JWT |
+| GET    | `/auth/me`       | Get logged-in user    |
+
+### Tasks
+
+| Method | Endpoint     | Purpose          |
+| ------ | ------------ | ---------------- |
+| GET    | `/tasks`     | Get user's tasks |
+| POST   | `/tasks`     | Create a task    |
+| PUT    | `/tasks/:id` | Update a task    |
+| DELETE | `/tasks/:id` | Delete a task    |
+
+Task routes require:
+
+```text
+Authorization: Bearer <token>
+```
+
+## Authentication Flow
+
+```text
+Register
+   ↓
+Password hashed using bcrypt
+   ↓
+User saved in MongoDB
+   ↓
+Login
+   ↓
+Password verified
+   ↓
+JWT generated
+   ↓
+JWT used for protected task routes
+```
+
+## Validation
+
+The server validates incoming requests before accessing the database.
+
+For example, a task without a title returns:
+
+```text
+400 Bad Request
+```
+
+## Testing with Postman
+
+The following tests were performed:
+
+1. Register user - `201 Created`
+2. Login - `200 OK` with JWT token
+3. Access `/tasks` without token - `401 Unauthorized`
+4. Access `/tasks` with token - `200 OK`
+5. Create task without title - `400 Bad Request`
+6. Access `/auth/me` with token - `200 OK`
+
+## Security
+
+* Passwords are never stored as plain text.
+* bcrypt is used for password hashing.
+* JWT secret is stored in `.env`.
+* `.env` is excluded from GitHub.
+* Protected routes require a valid JWT.
+* Invalid or expired tokens return `401 Unauthorized`.
+
+## Project Structure
+
+```text
+task-manager-api/
+├── client/
+├── middleware/
+│   ├── auth.js
+│   └── validate.js
+├── models/
+│   ├── User.js
+│   └── Task.js
+├── server.js
+├── package.json
+├── .env
+├── .gitignore
+└── README.md
+```
+
+
+
 
 ## ❓ Key Questions & Conceptual Analysis
 
-### 1. What changes are required on the backend (CORS) to allow the React dev server to call the Express API?
-Browsers enforce the **Same-Origin Policy** (SOP) by default, blocking web apps on one origin (e.g. `http://localhost:5173`) from making fetch requests to another origin (e.g. `http://localhost:5000`). To allow communication, Express must attach CORS headers (such as `Access-Control-Allow-Origin: *` or specific origin) to HTTP responses. This is configured via the `cors` package:
-```javascript
-const cors = require('cors');
-app.use(cors());
-```
+### 1. Why must passwords be hashed before storage instead of saved as plain text, even in a lab/demo project?
+- **Protection Against Database Breaches**: If an unauthorized party gains access to the database dump or backup files, plain-text passwords expose every user's raw credentials immediately.
+- **Mitigating Credential Stuffing**: Users frequently reuse passwords across multiple personal and professional services. Exposing plain text passwords compromises accounts on unrelated platforms.
+- **Insider Threat Minimization**: Developers, database administrators, and cloud engineers should never have direct visibility into user passwords.
+- **Why `bcrypt` Over Plain Hashes (MD5/SHA-256)**:
+  - Plain MD5/SHA algorithms are designed for speed and are vulnerable to precomputed lookup tables (**Rainbow Tables**) and GPU-accelerated brute-force attacks (billions of hashes per second).
+  - `bcrypt` automatically generates a cryptographically random **salt** for every user (defeating rainbow tables) and incorporates an **adaptive work factor (cost)** that intentionally slows computation, making dictionary attacks mathematically infeasible.
 
-### 2. Why should the UI re-fetch or update local state after a successful POST/PUT/DELETE rather than assuming success silently?
-- **Data Integrity**: MongoDB generates primary keys (`_id`), server timestamps (`createdAt`), default values, and schema sanitization (such as `.trim()` hooks). Local state must reflect the true database record.
-- **Error Recovery**: If a server-side validation error or network drop occurs, assuming success leads to ghost UI states that vanish upon browser refresh.
+### 2. What does the authentication middleware actually verify, and what happens if the token is missing or expired?
+- **Structure of a JWT**: A JWT contains three Base64URL-encoded segments separated by dots (`header.payload.signature`):
+  1. `Header`: Algorithm and token type (`HS256`, `JWT`).
+  2. `Payload`: Claims such as user ID, email, issued-at (`iat`), and expiration timestamp (`exp`).
+  3. `Signature`: Cryptographic hash produced with `HMACSHA256(base64Url(header) + "." + base64Url(payload), JWT_SECRET)`.
+- **What the Middleware Verifies**:
+  - Checks that the token was signed with the server's private `JWT_SECRET`. If any payload claim (e.g. user ID or role) is tampered with by a client, the recalculated signature will not match, failing verification.
+  - Checks that the current server timestamp is strictly less than the `exp` timestamp claim.
+- **Missing or Expired Token Behavior**:
+  - **Missing Token**: Middleware intercepts the request before controller execution and returns `401 Unauthorized` with an informative JSON message.
+  - **Expired or Tampered Token**: `jwt.verify()` throws a `TokenExpiredError` or `JsonWebTokenError`. When wrapped in a `try/catch` block, the middleware intercepts the exception, prevents unhandled server crashes, and safely responds with `401 Unauthorized`.
 
-### 3. What is the risk of not handling errors on write operations (POST/PUT/DELETE) the same way as read operations (GET)?
-Without write error handling, users receive false confidence that their data was saved. If a database disconnect or validation failure occurs during a POST or PUT, the user might close the browser and permanently lose unsaved work. Proper write error handling catches exceptions, rolls back optimistic UI changes, and provides actionable error notifications to the user.
+### 3. Why should input validation happen on the server even if the frontend already validates the same fields?
+- **Client-Side Validation is Easily Bypassed**: Any user or attacker can bypass browser validations using tools like Postman, `curl`, browser dev tools, or automated scripts, sending malformed, oversized, or malicious payloads directly to API endpoints.
+- **Data Integrity & Schema Guarantees**: Server-side validation acts as the definitive gatekeeper for the database, preventing invalid states (empty task titles, malformed emails, unsupported enum values) from corrupting the database.
+- **Defense in Depth**: Frontend validation is designed for **user experience** (instant UI feedback), whereas server-side validation is designed for **security and system integrity**. Never trust incoming client data.
+
+---
+
