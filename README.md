@@ -1,8 +1,8 @@
-# Practical 7 - Authentication and Middleware Pipeline
+# Task Manager API — ITUE301 (Practicals 4–9)
 
 ## ITUE301 - Advanced Web Development Frameworks
 
-A Task Management application with JWT authentication, bcrypt password hashing, Express middleware, and server-side input validation.
+A Task Management application with JWT authentication, bcrypt password hashing, Express middleware, server-side input validation, and in-memory caching (Practical 9).
 
 ## Features
 
@@ -15,6 +15,7 @@ A Task Management application with JWT authentication, bcrypt password hashing, 
 * User-specific tasks
 * 401 handling for invalid or expired tokens
 * Logout functionality
+* **Practical 9:** `node-cache` on `GET /tasks` and `GET /tasks/:id` (60s TTL), cache invalidation on POST/PUT/DELETE, debug stats at `/debug/cache-stats`
 
 ## Technologies
 
@@ -25,6 +26,7 @@ A Task Management application with JWT authentication, bcrypt password hashing, 
 * React
 * JWT (`jsonwebtoken`)
 * bcryptjs
+* `node-cache`
 * Postman
 
 ## Installation
@@ -50,6 +52,8 @@ PORT=5000
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_secret_key
 JWT_EXPIRES_IN=1h
+# Optional: set to false to compare uncached response times (Practical 9)
+CACHE_ENABLED=true
 ```
 
 Do not upload `.env` to GitHub.
@@ -106,6 +110,12 @@ http://localhost:5173
 | PUT    | `/tasks/:id` | Update a task    |
 | DELETE | `/tasks/:id` | Delete a task    |
 
+### Debug (Practical 9)
+
+| Method | Endpoint              | Purpose                          |
+| ------ | --------------------- | -------------------------------- |
+| GET    | `/debug/cache-stats`  | Cache hit/miss counters & status |
+
 Task routes require:
 
 ```text
@@ -151,6 +161,13 @@ The following tests were performed:
 5. Create task without title - `400 Bad Request`
 6. Access `/auth/me` with token - `200 OK`
 
+## Practical 9 — Caching
+
+* `GET /tasks` checks an in-memory cache first (per-user key), then MongoDB on miss.
+* `GET /tasks/:id` uses a separate cache key per user and task id.
+* POST, PUT, and DELETE invalidate the user's list cache (and the single-task key when applicable).
+* Response time comparison template: [docs/practical-9-cache-benchmark.md](docs/practical-9-cache-benchmark.md)
+
 ## Security
 
 * Passwords are never stored as plain text.
@@ -165,12 +182,15 @@ The following tests were performed:
 ```text
 task-manager-api/
 ├── client/
+├── docs/
+│   └── practical-9-cache-benchmark.md
 ├── middleware/
 │   ├── auth.js
 │   └── validate.js
 ├── models/
 │   ├── User.js
 │   └── Task.js
+├── cache.js
 ├── server.js
 ├── package.json
 ├── .env

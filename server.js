@@ -13,6 +13,16 @@ const {
   validateLoginInput,
   validateTaskInput
 } = require('./middleware/validate');
+const {
+  cache,
+  allTasksKey,
+  taskByIdKey,
+  recordHit,
+  recordMiss,
+  getStats,
+  invalidateUserTaskCaches,
+  isCacheEnabled
+} = require('./cache');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,11 +31,49 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_practical7_jwt_signing
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 
 // ==========================================
-// 1. Database Connection
+// 1. Database Connection & Demo User Seeder
 // ==========================================
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+const LOCAL_MONGO_URI = 'mongodb://127.0.0.1:27017/task-manager-db';
+
+const seedDemoUser = async () => {
+  try {
+    const demoEmail = 'student@charusat.edu.in';
+    const existing = await User.findOne({ email: demoEmail });
+    if (!existing) {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      await User.create({
+        name: 'Demo Student',
+        email: demoEmail,
+        password: hashedPassword
+      });
+      console.log(`Demo user seeded successfully (${demoEmail})`);
+    }
+  } catch (seedErr) {
+    console.warn('Demo user seed note:', seedErr.message);
+  }
+};
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(MONGO_URI);
+    console.log(`MongoDB connected successfully (${MONGO_URI.includes('mongodb+srv') ? 'Atlas' : MONGO_URI})`);
+    await seedDemoUser();
+  } catch (err) {
+    console.error('Primary MongoDB connection error:', err.message);
+    if (MONGO_URI !== LOCAL_MONGO_URI) {
+      console.log('Attempting connection to local MongoDB fallback:', LOCAL_MONGO_URI);
+      try {
+        await mongoose.connect(LOCAL_MONGO_URI);
+        console.log('Connected successfully to local MongoDB fallback.');
+        await seedDemoUser();
+      } catch (localErr) {
+        console.error('Local MongoDB fallback connection error:', localErr.message);
+      }
+    }
+  }
+};
+
+connectDB();
 
 // ==========================================
 // 2. Enable CORS (Cross-Origin Resource Sharing)
@@ -216,6 +264,17 @@ app.get('/me', auth, handleGetMe);
 // GET /tasks & /api/tasks - Retrieve all tasks for authenticated user
 const handleGetTasks = async (req, res, next) => {
   try {
+    const cacheKey = allTasksKey(req.user.id);
+
+    if (isCacheEnabled()) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        recordHit('allTasks');
+        return res.status(200).json(cached);
+      }
+      recordMiss('allTasks');
+    }
+
     // Return user's tasks or unassigned legacy tasks
     const tasks = await Task.find({
       $or: [
@@ -223,7 +282,13 @@ const handleGetTasks = async (req, res, next) => {
         { user: { $exists: false } },
         { user: null }
       ]
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (isCacheEnabled()) {
+      cache.set(cacheKey, tasks);
+    }
 
     res.status(200).json(tasks);
   } catch (err) {
@@ -237,7 +302,18 @@ app.get('/api/tasks', auth, handleGetTasks);
 // GET /tasks/:id & /api/tasks/:id - Retrieve single task by ID
 const handleGetTaskById = async (req, res, next) => {
   try {
-    const task = await Task.findById(req.params.id);
+    const cacheKey = taskByIdKey(req.user.id, req.params.id);
+
+    if (isCacheEnabled()) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        recordHit('taskById');
+        return res.status(200).json(cached);
+      }
+      recordMiss('taskById');
+    }
+
+    const task = await Task.findById(req.params.id).lean();
     if (!task) {
       return res.status(404).json({
         error: 'Not Found',
@@ -251,6 +327,10 @@ const handleGetTaskById = async (req, res, next) => {
         error: 'Forbidden',
         message: 'Access denied: You do not have permission to view this task.'
       });
+    }
+
+    if (isCacheEnabled()) {
+      cache.set(cacheKey, task);
     }
 
     res.status(200).json(task);
@@ -274,6 +354,7 @@ const handleCreateTask = async (req, res, next) => {
       user: req.user.id
     });
     const savedTask = await newTask.save();
+    invalidateUserTaskCaches(req.user.id);
     res.setHeader('Location', `/tasks/${savedTask._id}`);
     res.status(201).json(savedTask);
   } catch (err) {
@@ -309,6 +390,7 @@ const handleUpdateTask = async (req, res, next) => {
       { returnDocument: 'after', runValidators: true }
     );
 
+    invalidateUserTaskCaches(req.user.id, req.params.id);
     res.status(200).json(updatedTask);
   } catch (err) {
     next(err);
@@ -338,6 +420,7 @@ const handleDeleteTask = async (req, res, next) => {
     }
 
     const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    invalidateUserTaskCaches(req.user.id, req.params.id);
     res.status(200).json({
       message: 'Task deleted successfully',
       task: deletedTask
@@ -349,6 +432,20 @@ const handleDeleteTask = async (req, res, next) => {
 
 app.delete('/tasks/:id', auth, validateTaskId, handleDeleteTask);
 app.delete('/api/tasks/:id', auth, validateTaskId, handleDeleteTask);
+
+// GET /debug/cache-stats - Cache hit/miss counters (Practical 9)
+app.get('/debug/cache-stats', (req, res) => {
+  res.status(200).json({
+    cacheEnabled: isCacheEnabled(),
+    ...getStats()
+  });
+});
+app.get('/api/debug/cache-stats', (req, res) => {
+  res.status(200).json({
+    cacheEnabled: isCacheEnabled(),
+    ...getStats()
+  });
+});
 
 // GET /test-error - Demo route to test global error handling middleware
 app.get('/test-error', (req, res, next) => {

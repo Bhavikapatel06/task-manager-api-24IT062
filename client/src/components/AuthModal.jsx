@@ -45,6 +45,34 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Email is required.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('Password is required.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (isRegisterMode && !name.trim()) {
+      setErrorMessage('Full name is required for registration.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -52,7 +80,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         // Register flow
         const result = await register({
           name: name.trim(),
-          email: email.trim(),
+          email: trimmedEmail,
           password
         });
         resetForm();
@@ -60,7 +88,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       } else {
         // Login flow
         const result = await login({
-          email: email.trim(),
+          email: trimmedEmail,
           password
         });
         resetForm();
@@ -79,7 +107,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     if (demoType === 'student') {
       setEmail('student@charusat.edu.in');
       setPassword('password123');
-      setName('Demo User');
+      setName('Demo Student');
       setErrorMessage('');
     }
   };
@@ -160,7 +188,10 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                   type="text"
                   placeholder="e.g. Neel Patel"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (errorMessage) setErrorMessage('');
+                  }}
                   className="form-input"
                   autoComplete="name"
                 />
@@ -180,7 +211,10 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                 required
                 placeholder="e.g. student@charusat.edu.in"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 className="form-input"
                 autoComplete="email"
               />
@@ -200,7 +234,10 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                 minLength={6}
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 className="form-input"
                 autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
               />
