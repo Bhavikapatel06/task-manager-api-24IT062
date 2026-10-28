@@ -13,6 +13,11 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Build outputs
+dist/
+client/dist/
+
 # OS generated files
 .DS_Store
 Thumbs.db
+

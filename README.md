@@ -1,8 +1,8 @@
-# Task Manager API — ITUE301 (Practicals 4–9)
+# Task Manager API — ITUE301 (Practicals 4–11)
 
 ## ITUE301 - Advanced Web Development Frameworks
 
-A Task Management application with JWT authentication, bcrypt password hashing, Express middleware, server-side input validation, and in-memory caching (Practical 9).
+A full-stack Task Management application featuring JWT authentication, bcrypt password hashing, Express middleware, server-side validation, in-memory caching (Practical 9), event-driven asynchronous processing with EventEmitter (Practical 10), and multi-container Docker & Docker Compose orchestration (Practical 11).
 
 ## Features
 
@@ -16,17 +16,19 @@ A Task Management application with JWT authentication, bcrypt password hashing, 
 * 401 handling for invalid or expired tokens
 * Logout functionality
 * **Practical 9:** `node-cache` on `GET /tasks` and `GET /tasks/:id` (60s TTL), cache invalidation on POST/PUT/DELETE, debug stats at `/debug/cache-stats`
+* **Practical 10:** Event-Driven Architecture with native Node.js `EventEmitter` for background notification simulation
+* **Practical 11:** Complete containerization via Dockerfiles (backend & multi-stage React frontend) and orchestrated multi-container deployment via Docker Compose (`docker-compose.yml`)
 
 ## Technologies
 
-* Node.js
-* Express.js
-* MongoDB
-* Mongoose
-* React
+* Node.js & Express.js
+* MongoDB & Mongoose
+* React & Vite
+* Docker & Docker Compose
 * JWT (`jsonwebtoken`)
 * bcryptjs
 * `node-cache`
+* Native Node.js `EventEmitter`
 * Postman
 
 ## Installation
@@ -67,6 +69,34 @@ node_modules/
 
 ## Run the Project
 
+### Option A: Running with Docker Compose (Practical 11 — Single Command)
+
+The entire full-stack application (React frontend, Node/Express backend, and MongoDB database) can be started with a single command:
+
+```bash
+docker compose up --build
+```
+
+To run in detached (background) mode:
+
+```bash
+docker compose up --build -d
+```
+
+To view running containers:
+
+```bash
+docker ps
+```
+
+To stop all services and remove containers and network:
+
+```bash
+docker compose down
+```
+
+### Option B: Running Locally (Manual Development)
+
 Start the backend:
 
 ```bash
@@ -79,17 +109,11 @@ Start the frontend:
 npm run client
 ```
 
-Backend:
+### Access URLs
 
-```text
-http://localhost:5000
-```
-
-Frontend:
-
-```text
-http://localhost:5173
-```
+* **Frontend UI:** `http://localhost:5173`
+* **Backend API:** `http://localhost:5000`
+* **Demo Login:** Email: `student@charusat.edu.in` | Password: `password123`
 
 ## API Endpoints
 
@@ -182,51 +206,70 @@ The following tests were performed:
 ```text
 task-manager-api/
 ├── client/
+│   ├── src/
+│   ├── .dockerignore
+│   ├── Dockerfile             # Multi-stage frontend build (Practical 11)
+│   ├── package.json
+│   └── vite.config.js
 ├── docs/
-│   └── practical-9-cache-benchmark.md
+│   ├── practical-9-cache-benchmark.md
+│   ├── practical-10-event-driven-architecture.md
+│   └── practical-11-docker-containerization.md
 ├── middleware/
 │   ├── auth.js
 │   └── validate.js
 ├── models/
 │   ├── User.js
 │   └── Task.js
-├── cache.js
-├── server.js
-├── package.json
-├── .env
+├── .dockerignore              # Excludes node_modules & .env from build context
+├── .env.example
 ├── .gitignore
+├── cache.js
+├── docker-compose.yml         # Multi-container orchestration (Practical 11)
+├── Dockerfile                 # Backend Node/Express image (Practical 11)
+├── events.js                  # EventEmitter singleton (Practical 10)
+├── listeners.js               # Background event listeners (Practical 10)
+├── package.json
+├── server.js
 └── README.md
 ```
 
-
-
-
 ## ❓ Key Questions & Conceptual Analysis
 
-### 1. Why must passwords be hashed before storage instead of saved as plain text, even in a lab/demo project?
-- **Protection Against Database Breaches**: If an unauthorized party gains access to the database dump or backup files, plain-text passwords expose every user's raw credentials immediately.
-- **Mitigating Credential Stuffing**: Users frequently reuse passwords across multiple personal and professional services. Exposing plain text passwords compromises accounts on unrelated platforms.
-- **Insider Threat Minimization**: Developers, database administrators, and cloud engineers should never have direct visibility into user passwords.
-- **Why `bcrypt` Over Plain Hashes (MD5/SHA-256)**:
-  - Plain MD5/SHA algorithms are designed for speed and are vulnerable to precomputed lookup tables (**Rainbow Tables**) and GPU-accelerated brute-force attacks (billions of hashes per second).
-  - `bcrypt` automatically generates a cryptographically random **salt** for every user (defeating rainbow tables) and incorporates an **adaptive work factor (cost)** that intentionally slows computation, making dictionary attacks mathematically infeasible.
+### Practical 11: Containerization with Docker and Docker Compose
 
-### 2. What does the authentication middleware actually verify, and what happens if the token is missing or expired?
-- **Structure of a JWT**: A JWT contains three Base64URL-encoded segments separated by dots (`header.payload.signature`):
-  1. `Header`: Algorithm and token type (`HS256`, `JWT`).
-  2. `Payload`: Claims such as user ID, email, issued-at (`iat`), and expiration timestamp (`exp`).
-  3. `Signature`: Cryptographic hash produced with `HMACSHA256(base64Url(header) + "." + base64Url(payload), JWT_SECRET)`.
-- **What the Middleware Verifies**:
-  - Checks that the token was signed with the server's private `JWT_SECRET`. If any payload claim (e.g. user ID or role) is tampered with by a client, the recalculated signature will not match, failing verification.
-  - Checks that the current server timestamp is strictly less than the `exp` timestamp claim.
-- **Missing or Expired Token Behavior**:
-  - **Missing Token**: Middleware intercepts the request before controller execution and returns `401 Unauthorized` with an informative JSON message.
-  - **Expired or Tampered Token**: `jwt.verify()` throws a `TokenExpiredError` or `JsonWebTokenError`. When wrapped in a `try/catch` block, the middleware intercepts the exception, prevents unhandled server crashes, and safely responds with `401 Unauthorized`.
+#### 1. Why does the backend container need to reference the MongoDB container by its service name (`mongodb`) rather than `localhost`?
+* **Container Network Isolation**: Each container runs inside its own isolated network namespace with its own private loopback interface (`127.0.0.1` / `localhost`). Inside the backend container, `localhost:27017` refers to the backend container itself, where no database engine is listening.
+* **Automatic Service Discovery via Docker DNS**: When containers are connected to a user-defined network (such as `app-network`), Docker Compose runs an internal DNS resolver at `127.0.0.11`. It resolves the service name `mongodb` to the internal dynamic IP assigned to the MongoDB container.
+* **Resilience Across Restarts**: Containers may receive new internal IP addresses upon restart or recreation. Using the hostname `mongodb` guarantees that the connection string `mongodb://mongodb:27017/taskdb` remains permanently valid.
 
-### 3. Why should input validation happen on the server even if the frontend already validates the same fields?
-- **Client-Side Validation is Easily Bypassed**: Any user or attacker can bypass browser validations using tools like Postman, `curl`, browser dev tools, or automated scripts, sending malformed, oversized, or malicious payloads directly to API endpoints.
-- **Data Integrity & Schema Guarantees**: Server-side validation acts as the definitive gatekeeper for the database, preventing invalid states (empty task titles, malformed emails, unsupported enum values) from corrupting the database.
-- **Defense in Depth**: Frontend validation is designed for **user experience** (instant UI feedback), whereas server-side validation is designed for **security and system integrity**. Never trust incoming client data.
+#### 2. What is the difference between `EXPOSE` in a Dockerfile and the `ports` mapping in `docker-compose.yml`?
+* **`EXPOSE` (Dockerfile)**: Serves as documentation and container metadata indicating which port the process inside the container intends to listen on. It does **not** publish or bind the port to the host machine. Containers on the same Docker network can communicate over exposed ports without publishing them to the host.
+* **`ports` (docker-compose.yml)**: Actively publishes and forwards host ports to container ports (format: `"HOST:CONTAINER"`, e.g., `"5000:5000"`). This creates host-side IP table / socket bindings so that outside clients (e.g., your host web browser or Postman) can access the service via `http://localhost:5000`.
+
+#### 3. Why is it considered bad practice to copy `node_modules` into a Docker image instead of running `npm install` inside the container?
+* **Platform Architecture Incompatibility**: The host machine (e.g., Windows 11 x64) and the container OS (Debian/Alpine Linux x64/arm64) may have different ABIs and C runtimes. Native compiled C++ addons (e.g., `bcrypt`, `esbuild`) compiled on Windows will crash inside a Linux container with binary incompatibility errors (`invalid ELF header`).
+* **Bloated Build Context**: Host `node_modules` folders typically exceed several hundred megabytes. Sending them across the Docker daemon socket drastically slows down the build context transfer time.
+* **Layer Caching Invalidation**: Docker builds use layer caching. By copying only `package*.json` and running `npm install` before `COPY . .`, Docker caches the installed dependencies layer. Subsequent code edits rebuild almost instantaneously without reinstalling dependencies.
+* **Clean & Deterministic Environment**: Installing dependencies inside the container ensures a pristine environment governed strictly by `package.json` / `package-lock.json`.
+
+---
+
+### Practical 4–7: Authentication, Hashing & Validation
+
+#### 1. Why must passwords be hashed before storage instead of saved as plain text?
+* Protects against database breaches and dump exposure.
+* Defeats credential stuffing across unrelated platforms.
+* `bcryptjs` introduces a cryptographic salt and configurable work factor to defeat rainbow tables and GPU brute-force attacks.
+
+#### 2. What does the authentication middleware verify?
+* Validates token signature against `JWT_SECRET` to prevent tampering.
+* Validates `exp` claim against current server time.
+* Returns `401 Unauthorized` for missing, expired, or invalid tokens.
+
+#### 3. Why validate on the server if the client already validates?
+* Client-side validation is trivial to bypass via Postman, `curl`, or scripts.
+* Server-side validation is the authoritative gatekeeper for database integrity and security.
 
 ---
 

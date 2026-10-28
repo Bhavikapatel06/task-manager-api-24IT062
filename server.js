@@ -1,3 +1,9 @@
+if (!globalThis.crypto) {
+  try {
+    globalThis.crypto = require('crypto').webcrypto || require('crypto');
+  } catch (_) {}
+}
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -57,21 +63,27 @@ const seedDemoUser = async () => {
   }
 };
 
-const connectDB = async () => {
-  try {
-    await mongoose.connect(MONGO_URI);
-    console.log(`MongoDB connected successfully (${MONGO_URI.includes('mongodb+srv') ? 'Atlas' : MONGO_URI})`);
-    await seedDemoUser();
-  } catch (err) {
-    console.error('Primary MongoDB connection error:', err.message);
-    if (MONGO_URI !== LOCAL_MONGO_URI) {
-      console.log('Attempting connection to local MongoDB fallback:', LOCAL_MONGO_URI);
-      try {
-        await mongoose.connect(LOCAL_MONGO_URI);
-        console.log('Connected successfully to local MongoDB fallback.');
-        await seedDemoUser();
-      } catch (localErr) {
-        console.error('Local MongoDB fallback connection error:', localErr.message);
+const connectDB = async (retries = 5, delay = 2500) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await mongoose.connect(MONGO_URI);
+      console.log(`MongoDB connected successfully (${MONGO_URI.includes('mongodb+srv') ? 'Atlas' : MONGO_URI})`);
+      await seedDemoUser();
+      return;
+    } catch (err) {
+      console.error(`MongoDB connection attempt ${attempt}/${retries} failed:`, err.message);
+      if (attempt < retries) {
+        console.log(`Retrying MongoDB connection in ${delay / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else if (MONGO_URI !== LOCAL_MONGO_URI) {
+        console.log('Attempting connection to local MongoDB fallback:', LOCAL_MONGO_URI);
+        try {
+          await mongoose.connect(LOCAL_MONGO_URI);
+          console.log('Connected successfully to local MongoDB fallback.');
+          await seedDemoUser();
+        } catch (localErr) {
+          console.error('Local MongoDB fallback connection error:', localErr.message);
+        }
       }
     }
   }
