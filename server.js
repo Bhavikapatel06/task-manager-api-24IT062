@@ -24,6 +24,10 @@ const {
   isCacheEnabled
 } = require('./cache');
 
+// Register event listeners & import EventEmitter (Practical 10)
+require('./listeners');
+const taskEvents = require('./events');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/task-manager-db';
@@ -355,8 +359,12 @@ const handleCreateTask = async (req, res, next) => {
     });
     const savedTask = await newTask.save();
     invalidateUserTaskCaches(req.user.id);
+    console.log(`[API] Response sent at ${new Date().toISOString()}`);
     res.setHeader('Location', `/tasks/${savedTask._id}`);
     res.status(201).json(savedTask);
+
+    // Emit 'task-created' event asynchronously after response is sent (Practical 10)
+    taskEvents.emit('task-created', savedTask);
   } catch (err) {
     next(err);
   }
@@ -421,10 +429,14 @@ const handleDeleteTask = async (req, res, next) => {
 
     const deletedTask = await Task.findByIdAndDelete(req.params.id);
     invalidateUserTaskCaches(req.user.id, req.params.id);
+    console.log(`[API] Delete response sent at ${new Date().toISOString()}`);
     res.status(200).json({
       message: 'Task deleted successfully',
       task: deletedTask
     });
+
+    // Emit 'task-deleted' event asynchronously after response is sent (Practical 10)
+    taskEvents.emit('task-deleted', deletedTask);
   } catch (err) {
     next(err);
   }
