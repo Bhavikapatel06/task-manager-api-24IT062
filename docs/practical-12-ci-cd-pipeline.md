@@ -358,3 +358,4 @@ To demonstrate the pipeline's failure detection capabilities as required by the 
 - [x] Added status badge to project `README.md`
 - [x] Tested both passing and failing assertions locally
 - [x] All 4 tests verified passing with exit code 0
+
