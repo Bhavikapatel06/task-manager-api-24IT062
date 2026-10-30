@@ -89,12 +89,23 @@ const connectDB = async (retries = 5, delay = 2500) => {
   }
 };
 
-connectDB();
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 // ==========================================
 // 2. Enable CORS (Cross-Origin Resource Sharing)
 // ==========================================
 app.use(cors());
+
+// Health Check / Root Endpoint (Practical 12)
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'online',
+    message: 'Task Manager API is running',
+    version: '1.0.0'
+  });
+});
 
 // ==========================================
 // 3. Global Request Logging Middleware
