@@ -20,7 +20,10 @@ module.exports = [
         jest: 'readonly',
         beforeAll: 'readonly',
         afterAll: 'readonly',
-        setTimeout: 'readonly'
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        fetch: 'readonly',
+        AbortController: 'readonly'
       }
     },
     rules: {
@@ -28,4 +31,3 @@ module.exports = [
     }
   }
 ];
-

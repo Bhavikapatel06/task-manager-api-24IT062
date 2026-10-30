@@ -234,6 +234,21 @@ export const deleteTask = async (id) => {
   return handleResponse(response);
 };
 
+/**
+ * Generate AI task description (POST /api/ai/generate-description)
+ * @param {string} title Task title
+ */
+export const generateTaskDescription = async (title) => {
+  const response = await fetch(`${BASE_URL}/api/ai/generate-description`, {
+    method: 'POST',
+    headers: getAuthHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify({ title })
+  });
+  return handleResponse(response);
+};
+
 export default {
   BASE_URL,
   getToken,
@@ -250,5 +265,6 @@ export default {
   getTaskById,
   createTask,
   updateTask,
-  deleteTask
+  deleteTask,
+  generateTaskDescription
 };

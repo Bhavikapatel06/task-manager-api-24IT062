@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { generateTaskDescription } from '../api';
 import { PlusCircle, Edit3, X, Sparkles } from 'lucide-react';
 
 export default function TaskForm({ isOpen, onSubmit, editingTask, onClose, isSubmitting }) {
@@ -10,6 +11,47 @@ export default function TaskForm({ isOpen, onSubmit, editingTask, onClose, isSub
   });
 
   const [validationError, setValidationError] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiNotice, setAiNotice] = useState(null);
+
+  const handleGenerateAiDescription = async () => {
+    if (!formData.title.trim()) {
+      setValidationError("Please enter a task title first to generate an AI description.");
+      return;
+    }
+
+    try {
+      setIsAiLoading(true);
+      setAiNotice(null);
+      const res = await generateTaskDescription(formData.title.trim());
+
+      if (res && res.description) {
+        setFormData((prev) => ({
+          ...prev,
+          description: res.description
+        }));
+        setAiNotice({
+          fallback: Boolean(res.fallback),
+          text: res.fallback
+            ? "⚠️ AI service unavailable. A smart local template suggestion was applied."
+            : "✨ AI description generated! Feel free to review and edit."
+        });
+      }
+    } catch (err) {
+      console.warn("AI generation fallback triggered:", err.message);
+      setFormData((prev) => ({
+        ...prev,
+        description: "Review requirements, execute deliverables, and complete subtasks for: " + formData.title.trim()
+      }));
+      setAiNotice({
+        fallback: true,
+        text: "⚠️ Offline fallback description applied."
+      });
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
 
   useEffect(() => {
     if (editingTask) {
@@ -20,6 +62,7 @@ export default function TaskForm({ isOpen, onSubmit, editingTask, onClose, isSub
         completed: Boolean(editingTask.completed)
       });
       setValidationError('');
+      setAiNotice(null);
     } else {
       setFormData({
         title: '',
@@ -28,6 +71,7 @@ export default function TaskForm({ isOpen, onSubmit, editingTask, onClose, isSub
         completed: false
       });
       setValidationError('');
+      setAiNotice(null);
     }
   }, [editingTask, isOpen]);
 
@@ -137,9 +181,54 @@ export default function TaskForm({ isOpen, onSubmit, editingTask, onClose, isSub
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="task-desc">
-              Description <span style={{ color: 'var(--text-muted)', fontWeight: 'normal' }}>(optional)</span>
-            </label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
+              <label className="form-label" htmlFor="task-desc" style={{ marginBottom: 0 }}>
+                Description <span style={{ color: "var(--text-muted)", fontWeight: "normal" }}>(optional)</span>
+              </label>
+              <button
+                type="button"
+                className="btn-ai-generate"
+                onClick={handleGenerateAiDescription}
+                disabled={isAiLoading || !formData.title.trim() || isSubmitting}
+                title={!formData.title.trim() ? "Enter a task title first" : "Auto-generate description with AI"}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.22rem 0.65rem",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  borderRadius: "6px",
+                  border: "1px solid #818cf8",
+                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12))",
+                  color: "#6366f1",
+                  cursor: formData.title.trim() && !isAiLoading ? "pointer" : "not-allowed",
+                  opacity: formData.title.trim() && !isAiLoading ? 1 : 0.6,
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <Sparkles size={13} style={{ animation: isAiLoading ? "spin 1.5s linear infinite" : "none" }} />
+                {isAiLoading ? "Generating AI..." : "Generate with AI"}
+              </button>
+            </div>
+
+            {aiNotice && (
+              <div
+                style={{
+                  fontSize: "0.74rem",
+                  padding: "0.45rem 0.65rem",
+                  borderRadius: "6px",
+                  marginBottom: "0.55rem",
+                  background: aiNotice.fallback ? "rgba(245, 158, 11, 0.1)" : "rgba(99, 102, 241, 0.08)",
+                  border: `1px solid ${aiNotice.fallback ? "rgba(245, 158, 11, 0.3)" : "rgba(99, 102, 241, 0.25)"}`,
+                  color: aiNotice.fallback ? "#b45309" : "#4f46e5",
+                  lineHeight: "1.4"
+                }}
+              >
+                {aiNotice.text}
+              </div>
+            )}
+
             <textarea
               id="task-desc"
               name="description"
@@ -149,6 +238,10 @@ export default function TaskForm({ isOpen, onSubmit, editingTask, onClose, isSub
               onChange={handleChange}
               disabled={isSubmitting}
             />
+
+            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.3rem", fontStyle: "italic" }}>
+              💡 Suggestions are AI-generated. Review and modify before saving.
+            </div>
           </div>
 
           <div className="form-group">

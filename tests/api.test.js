@@ -2,6 +2,7 @@ const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const app = require('../server');
 const Task = require('../models/Task');
+const aiService = require('../aiService');
 
 describe('Task Management API - CI/CD Automated Tests', () => {
   const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_practical7_jwt_signing_key_2026_awdf';
@@ -20,6 +21,16 @@ describe('Task Management API - CI/CD Automated Tests', () => {
         ])
       })
     }));
+
+    // Mock AI service in CI test suite for fast, deterministic, offline-resilient execution
+    jest.spyOn(aiService, 'generateDescription').mockImplementation(async (title) => {
+      return {
+        description: `Automated test description for task: ${title}`,
+        fallback: false,
+        source: 'ai_generated',
+        disclaimer: 'Notice: AI-generated suggestions should be reviewed and verified by the user before saving.'
+      };
+    });
   });
 
   afterAll(() => {
@@ -58,5 +69,25 @@ describe('Task Management API - CI/CD Automated Tests', () => {
     expect(res.body).toHaveProperty('cacheEnabled');
     expect(res.body).toHaveProperty('cachedKeyCount');
   });
-});
 
+  // Test 5: AI Description Generation (POST /api/ai/generate-description) (Practical 13)
+  test('POST /api/ai/generate-description returns 200 and description', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate-description')
+      .send({ title: 'Configure GitHub Actions CI Workflow' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty('description');
+    expect(typeof res.body.description).toBe('string');
+    expect(res.body.description.length).toBeGreaterThan(0);
+    expect(res.body).toHaveProperty('disclaimer');
+  });
+
+  // Test 6: AI Validation on missing title (Practical 13)
+  test('POST /api/ai/generate-description returns 400 when title is missing', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate-description')
+      .send({});
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('Bad Request');
+  });
+});

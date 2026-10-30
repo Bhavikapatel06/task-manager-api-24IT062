@@ -34,6 +34,9 @@ const {
 require('./listeners');
 const taskEvents = require('./events');
 
+// AI Assistant Integration (Practical 13)
+const { generateDescription } = require('./aiService');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/task-manager-db';
@@ -489,7 +492,37 @@ app.get('/test-error', (req, res, next) => {
 });
 
 // ==========================================
-// 8. 404 Handler for Undefined Routes
+// 8. AI Assistant Route (Practical 13)
+// ==========================================
+const handleGenerateDescription = async (req, res) => {
+  try {
+    const { title } = req.body;
+    if (!title || !title.trim()) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Field \"title\" is required to generate a description."
+      });
+    }
+
+    const clientIdentifier = (req.user && req.user.id) || req.ip || "anonymous";
+    const result = await generateDescription(title, clientIdentifier);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("[AI Endpoint Error]:", err.message);
+    res.status(200).json({
+      description: "Review requirements and execute deliverables for: " + (req.body?.title || ""),
+      fallback: true,
+      source: "fallback",
+      message: "AI service temporarily unavailable."
+    });
+  }
+};
+
+app.post('/api/ai/generate-description', handleGenerateDescription);
+app.post('/ai/generate-description', handleGenerateDescription);
+
+// ==========================================
+// 9. 404 Handler for Undefined Routes
 // ==========================================
 app.use((req, res, next) => {
   res.status(404).json({
