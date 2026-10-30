@@ -216,3 +216,4 @@ Testing system behavior with an invalid or broken API key (`invalid_key_demo`):
 - [x] Integrated "Generate with AI" button, loading state, and disclaimer in `client/src/components/TaskForm.jsx`
 - [x] Added automated unit & integration tests in `tests/api.test.js` (6/6 tests passing)
 - [x] Verified graceful degradation failure path and local fallback behavior
+
