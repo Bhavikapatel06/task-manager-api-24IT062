@@ -29,7 +29,7 @@ describe('Task Management API - CI/CD Automated Tests', () => {
   // Test 1: API Health Check (GET /)
   test('GET / returns 200', async () => {
     const res = await request(app).get('/');
-    expect(res.statusCode).toBe(500); // Deliberate failure demo
+    expect(res.statusCode).toBe(200);
     expect(res.body.status).toBe('online');
     expect(res.body.message).toBe('Task Manager API is running');
   });
